@@ -1,28 +1,25 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace ConsoleApp1
+namespace SqlBrowserClient
 {
     public class SqlBrowserClient
     {
         private static readonly int SQL_BROWSER_PORT = 1434;
 
-        private readonly byte[] _getInstancesMessage = new byte [1] {2};
+        private readonly byte[] _getInstancesMessage = new byte[1] { 2 };
 
-        public List<SqlInstance> Instances { get; private set;  }
+        public List<SqlInstance> Instances { get; private set; }
 
 
         public void GetInstances()
         {
-            using var client = new UdpBroadcastMessage(SQL_BROWSER_PORT, _getInstancesMessage, new TimeSpan(0, 0, 10));
+            using var client = new UdpBroadcastMessage(SQL_BROWSER_PORT, _getInstancesMessage, new TimeSpan(0, 0, 5));
 
             var responses = client.GetResponse();
-            Console.WriteLine("Got Responses");
             Instances = ParseBrowserResponses(responses);
-
         }
 
         private List<SqlInstance> ParseBrowserResponses(List<string> responses)
@@ -45,7 +42,7 @@ namespace ConsoleApp1
                 match.Groups["Version"].Captures[0].Value,
                 match.Groups["tcp"].Captures.Count > 0 ? int.Parse(match.Groups["tcp"].Captures[0].Value) : 0,
                 match.Groups["np"].Captures.Count > 0 ? match.Groups["np"].Captures[0].Value : string.Empty);
-            
+
         }
     }
 }

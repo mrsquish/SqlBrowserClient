@@ -1,17 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ConsoleApp1
+namespace SqlBrowserClient
 {
     internal class UdpBroadcastMessage : IDisposable
     {
+        private const int SocketTimeoutExceptionCode = 10060;
+
         private readonly int _port;
         private readonly byte[] _message;
         private readonly TimeSpan _timeout;
@@ -23,8 +23,7 @@ namespace ConsoleApp1
             _port = port;
             _message = message;
             _timeout = timeout;
-            _udpClient = new UdpClient();
-            _udpClient.Client.ReceiveTimeout = 1000;
+            _udpClient = new UdpClient { Client = { ReceiveTimeout = 1000 } };
             _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
             _udpClient.EnableBroadcast = true;
             _cancellation = new CancellationTokenSource();
@@ -33,47 +32,33 @@ namespace ConsoleApp1
 
         public List<string> GetResponse()
         {
-            try
-            {
-                var responses = new List<string>();
+            var responses = new List<string>();
 
-                var receive = new Task((cancelToken) =>
+            var receive = new Task((cancelToken) =>
+            {
+                var anyEndPoint = new IPEndPoint(IPAddress.Any, 0);
+                while (!_cancellation.IsCancellationRequested)
                 {
-                    var anyEndPoint = new IPEndPoint(IPAddress.Any, 0);
-                    while (!_cancellation.IsCancellationRequested)
+                    try
                     {
-                        try
-                        {
-                            var receiveBuffer = _udpClient.Receive(ref anyEndPoint);
-                            responses.Add(Encoding.UTF8.GetString(receiveBuffer));
-                            Console.WriteLine("READING results");
-                        }
-                        catch (SocketException se)
-                        {
-                            if (se.ErrorCode != 10060)  throw;
-                        }
+                        var receiveBuffer = _udpClient.Receive(ref anyEndPoint);
+                        responses.Add(Encoding.UTF8.GetString(receiveBuffer));
                     }
-                }, _cancellation.Token);
+                    catch (SocketException se)
+                    {
+                        if (se.ErrorCode != SocketTimeoutExceptionCode) throw;
+                    }
+                }
+            }, _cancellation.Token);
 
-                Console.WriteLine("Start");
-                receive.Start();
-                Console.WriteLine("Send");
-                _udpClient.Send(_message, _message.Length, new IPEndPoint(IPAddress.Broadcast, _port));
-                Task.WaitAll(new[] {receive});
-                Console.WriteLine("Waiting");
-                return responses;
-            }
-            catch (Exception exp)
-            {
-                Console.WriteLine($"Error thrown {exp.Message}");
-                throw;
-            }
-
+            receive.Start();
+            _udpClient.Send(_message, _message.Length, new IPEndPoint(IPAddress.Broadcast, _port));
+            Task.WaitAll(new[] { receive });
+            return responses;
         }
 
         public void Dispose()
         {
-            Console.WriteLine($"Disposing");
             _udpClient?.Dispose();
             _cancellation?.Dispose();
         }
